@@ -1,0 +1,215 @@
+Sharding is a way of dividing an index’ data volume into smaller parts which are called shards which enables you to distribute data across multiple nodes within a cluster. This means that you can store a terabyte of data even if you dont't have nodes with that disk capacity. Sharding also increases performance because when shards are distributed on multiple nodes, then the search queries can be parallelized and the search will be performed more efficiently.
+
+# get the week with the biggest sales
+# le grupez dupa week si fac suma taxful_total_price
+# apoi aleg agregarea cu taxful_total_price maxim
+
+GET kibana_sample_data_ecommerce/_search
+{
+  "size": 0,
+  "aggs": {
+     "sales_every_week" : {
+        "date_histogram" : {
+                "field" : "order_date",
+                "interval" : "week"
+        },
+        "aggs": {
+          "total_week_sales": {
+            "sum": {
+              "field": "taxful_total_price"
+            }
+          }
+        }
+     },
+    "biggest_week_sales": {
+      "max_bucket": {
+        "buckets_path": "sales_every_week>total_week_sales" 
+      }
+    }
+  }
+}
+
+# get the day with the biggest sales
+# similar cererea anterioara dar fac grupuri la un interval de 1 zi
+
+GET kibana_sample_data_ecommerce/_search
+{
+  "size": 0,
+  "aggs": {
+     "sales_every_day" : {
+        "date_histogram" : {
+                "field" : "order_date",
+                "interval" : "day"
+        },
+        "aggs": {
+          "total_day_sales": {
+            "sum": {
+              "field": "taxful_total_price"
+            }
+          }
+        }
+     },
+    "biggest_day_sales": {
+      "max_bucket": {
+        "buckets_path": "sales_every_day>total_day_sales"
+      }
+    }
+  }
+}
+
+# get the continent with the biggest sales
+
+GET kibana_sample_data_ecommerce/_search
+{
+  "size": 0,
+  "aggs": {
+     "continents" : {
+        "terms": {
+          "field": "geoip.continent_name"
+        },
+        "aggs": {
+          "total_sales": {
+            "sum": {
+              "field": "taxful_total_price"
+            }
+          }
+        }
+     },
+    "biggest_continent_sales": {
+      "max_bucket": {
+        "buckets_path": "continents>total_sales"
+      }
+    }
+  }
+}
+
+# get the best selling day of the week
+
+GET kibana_sample_data_ecommerce/_search
+{
+  "size": 0,
+  "aggs": {
+     "week_day" : {
+        "terms": {
+          "field": "day_of_week"
+        },
+        "aggs": {
+          "total_sales": {
+            "sum": {
+              "field": "taxful_total_price"
+            }
+          }
+        }
+     },
+    "best_selling_day": {
+      "max_bucket": {
+        "buckets_path": "week_day>total_sales"
+      }
+    }
+  }
+}
+
+# find all categories
+
+GET kibana_sample_data_ecommerce/_search?size=0
+{
+  "aggs": {
+     "categories" : {
+        "terms": {
+          "field": "products.category.keyword"
+        }
+     }
+  }
+}
+
+# get the most valuable (generated biggest revenue) product
+
+GET kibana_sample_data_ecommerce/_search
+{
+  "size": 0, 
+    "aggs" : {
+        "all_products" : {
+            "terms": {
+                "field": "products.product_id"
+            },
+            "aggs" : {
+                "total_product_sales" : { 
+                  "sum": { 
+                    "field" : "products.price"
+                  } 
+                }
+            }
+        },
+        "best_selling_product": {
+          "max_bucket": {
+            "buckets_path": "all_products>total_product_sales"
+          }
+        }
+    }
+}
+
+# Bonus: get the most valuable (generated biggest revenue) product per category
+
+GET kibana_sample_data_ecommerce/_search
+{
+  "size": 0,
+    "aggs" : {
+        "categories" : {
+            "terms": {
+                "field": "products.category.keyword"
+            },
+            "aggs" : {
+                "products_per_category" : { 
+                  "terms": { 
+                    "field" : "products.product_id"
+                  },
+                  "aggs": {
+                    "product_revenue": {
+                      "sum": {
+                        "field": "products.taxful_price"
+                      }
+                    }
+                  }
+                },
+                "best_selling_product_per_category": {
+                  "max_bucket": {
+                    "buckets_path": "products_per_category>product_revenue"
+                  }
+                }
+            }
+        }
+    }
+  }
+
+# (Bonus) get best selling category per continent
+
+GET kibana_sample_data_ecommerce/_search
+{
+  "size": 0,
+  "aggs": {
+    "continents": {
+      "terms": {
+        "field": "geoip.continent_name"
+      },
+      "aggs" : {
+        "categories" : {
+            "terms": {
+                "field": "products.category.keyword"
+            },
+            "aggs" : {
+                "products_revenue_per_category" : { 
+                  "sum": { 
+                    "field" : "products.taxful_price"
+                  }
+                }
+            }
+        },
+        "best_selling_category_per_continent": {
+          "max_bucket": {
+            "buckets_path": "categories>products_revenue_per_category"
+          }
+        }
+      }
+    }
+  }
+}
