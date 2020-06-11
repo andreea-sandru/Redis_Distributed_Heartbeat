@@ -1,4 +1,7 @@
-Sharding is a way of dividing an index’ data volume into smaller parts which are called shards which enables you to distribute data across multiple nodes within a cluster. This means that you can store a terabyte of data even if you dont't have nodes with that disk capacity. Sharding also increases performance because when shards are distributed on multiple nodes, then the search queries can be parallelized and the search will be performed more efficiently.
+Sharding is a way of dividing an index’ data volume into smaller parts which are called shards which enables you to distribute 
+data across multiple nodes within a cluster. This means that you can store a terabyte of data even if you dont't have nodes with 
+that disk capacity. Sharding also increases performance because when shards are distributed on multiple nodes, the search 
+queries can be parallelized and the search will be performed more efficiently.
 
 # get the week with the biggest sales
 # le grupez dupa week si fac suma taxful_total_price
