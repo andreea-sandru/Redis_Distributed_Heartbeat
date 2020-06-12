@@ -20,8 +20,49 @@ W = 20
 C = 10
 N = 10
 
-LOCK_TIMEOUT = 3
+LOCK_TIMEOUT = 4
 lock_key = 'lock.foo'
+
+# returns the next fibonacci number 
+def nextFibo(n): 
+    if n == None:
+        return 1
+    return int(round(float(n) * (1 + sqrt(5))/2.0))
+
+# executes a function every 'interval' seconds
+def do_every (interval, func):
+    threading.Timer (
+        interval,
+        do_every, [interval, func]
+    ).start ()
+    func ()
+
+# executes a function with arguments every 'interval' seconds
+def do_every_heartbeat (interval, func, zname, worker_id):
+    threading.Timer (
+        interval, 
+        do_every_heartbeat, [interval, func, zname, worker_id]
+    ).start ()
+    func(zname, worker_id)
+
+# updates the workers' heartbeat
+def worker_heartbeat(zname, worker_id):
+    r.zadd(zname, {worker_id: time.time()})
+
+# updates a Redis string key called 'fib'        
+def worker_fib():
+    timeout = acquire_lock()
+    next_fibo = nextFibo(r.get('fib'))
+    print 'UPDATED FIBO to ' + str(next_fibo)
+    r.getset('fib', next_fibo)
+    release_lock(timeout)        
+
+# the worker has a 10% chance to crash
+def worker_crash():
+    chance = random.randint(1, 10)
+    if chance == 1:
+        print 'WORKER CRASHED'
+        exit()
 
 # lock acquire
 def acquire_lock():
@@ -36,68 +77,43 @@ def acquire_lock():
             time.sleep(0.001)
     return timeout
 
-#lock release
+# lock release
 def release_lock(timeout):
     if time.time() < timeout:
         r.delete(lock_key)
 
-# returns the next fibonacci number 
-def nextFibo(n): 
-    if n == None:
-        return 1
-    return int(round(float(n) * (1 + sqrt(5))/2.0))
-
 def do_work(worker_id):
-
     try:
         zname = 'heartbeats'
         zset = r.zrange(zname, 0, -1, withscores=True)
-        # score: date of the last heartbeat (unix timestamp in seconds)
+        # score: date of the last heartbeat
         # member: id of the worker
         for pair in zset:
             id = pair[0]
             date = pair[1]
-            # delete outdated elements (score < (now() - T) seconds) 
+            # delete outdated elements (score < (now() - T)) 
             if date < time.time() - T:
                 print 'DELETING outdated member' + str(id)
                 r.zrem(zname, id)
         
         count = r.zcount(zname, float('-inf'), float('inf'))
-        # if there are less than N active elements => add the worker to the zset, otherwise => exit
+        # if there are less than N active elements => add the worker to the zset, otherwise exit
         if count < N:
             print 'ADDING new worker'
             r.zadd(zname, {worker_id: time.time()})
         else: 
-            return
+            print 'EXITING worker ' + str(worker_id)
+            exit()
 
-        init= time.time()
-        
-        fin_time1 = init + T
-        fin_time2 = init + W
-        fin_time3 = init + C
- 
-        while(True):
-            # every T seconds, the worker updates its entry in heartbeats zset with the current timestamp
-            if time.time() >= fin_time1:
-                r.zadd(zname, {worker_id: time.time()})
-                fin_time1 = time.time() + T
-            
-            # every W seconds, the worker updates a Redis string key 'fib'
-            if time.time() >= fin_time2:
-                timeout = acquire_lock()
-                next_fibo = nextFibo(r.get('fib'))
-                print 'UPDATED FIBO to ' + str(next_fibo)
-                r.getset('fib', next_fibo)
-                fin_time2 = time.time() + W
-                release_lock(timeout)
-            
-            # every C seconds, the worker has 10% chance to crash
-            if time.time() >= fin_time3:
-                chance = random.randint(1, 10)
-                if chance == 1:
-                    return
-                fin_time3 = time.time() + C
+        # every T seconds, the worker updates its entry in heartbeats zset with the current timestamp
+        do_every_heartbeat (T, worker_heartbeat, zname, worker_id)
 
+        # every W seconds, the worker updates a Redis string key 'fib'
+        do_every (W, worker_fib)
+
+        # every C seconds, the worker has 10% chance to crash
+        do_every (C, worker_crash)
+    
     except Exception as e:
         print(e)
 
@@ -106,7 +122,7 @@ class WorkerThread (threading.Thread):
       threading.Thread.__init__(self)
       self.threadID = threadID
    def run(self):
-        print "Starting thread no. " + str(self.threadID) + "\n"
+        print "Starting worker no. " + str(self.threadID)
         do_work(self.threadID)
        
 class ManagerThread (threading.Thread):
